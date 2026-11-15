@@ -23,6 +23,8 @@ defense (KV): a reused proof reference is rejected even across cold starts.
 Poseidon hash is published; the strategy stays secret), and every one of 20 moves ships a proof that
 the move followed that committed strategy. `vercel-prover.vercel.app/api/vfy`.
 
+**Try it live (no backend, nothing sent):** [vercel-prover.vercel.app/demo.html](https://vercel-prover.vercel.app/demo.html) — click to verify a real APPROVE and a real REJECT proof the agent produced, in your own browser, against the registered key.
+
 ## The receipts (what's checked, not claimed)
 - Both proofs **verify against zkVerify's registered verification keys** — Gatekeeper
   `0x6b79…77b0`, vfy-policy `0x6c56…be047` — the same keys the platform checks against. You can't
