@@ -29,4 +29,25 @@ await check('valid',base(),'APPROVE','VALID_CONDITION');
 await check('VK sub',(()=>{const t=base();t.input.proof_vk='0x'+'1'.repeat(64);return t;})(),'REJECT','VK_SUBSTITUTION');
 await check('amount>max',(()=>{const t=base();t.input.amount='1500';return t;})(),'REJECT','AMOUNT_OVERFLOW');
 await check('expired',(()=>{const t=base();t.input.current_block=8430001;return t;})(),'REJECT','EXPIRED_CONDITION');
+
+// Durable replay via KV, surviving a simulated cold start (in-memory cache cleared between the two).
+{
+  const store=new Map();
+  const env={ SEEN:{ get:async k=>store.get(k)||null, put:async (k,v)=>{store.set(k,v);} } };
+  async function checkEnv(name,obj,wantDec,wantReason){
+    const body=new TextEncoder().encode(JSON.stringify(obj));
+    const sig=await hmacHex(SECRET,body);
+    const resp=await handleRaw(body,new Headers({'x-agent-games-signature':sig}),SECRET,env);
+    const b=JSON.parse(await resp.text());
+    const ok=b.decision===wantDec&&b.reason_code===wantReason;
+    console.log(`${ok?'PASS':'FAIL'}  ${name} -> ${b.decision}/${b.reason_code}`); ok?pass++:fail++;
+  }
+  const P='0xkvreuse00000001';
+  _resetSeen();
+  const t1=base(); t1.input.proof_tx=P;
+  await checkEnv('kv: first accept stores ref', t1, 'APPROVE','VALID_CONDITION');
+  _resetSeen(); // simulate a cold worker start: in-memory Set is gone, only KV remembers
+  const t2=base(); t2.input.proof_tx=P;
+  await checkEnv('kv: replay caught after cold start', t2, 'REJECT','PROOF_REUSED');
+}
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail?1:0);

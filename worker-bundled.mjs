@@ -77,7 +77,7 @@ function timingSafeEqHex(a, b) {
   return r === 0;
 }
 
-async function handleRaw(rawBytes, headers, secret) {
+async function handleRaw(rawBytes, headers, secret, env) {
   const got = (headers.get('x-agent-games-signature') || '').replace(/^sha256=/i, '').trim().toLowerCase();
   const want = await hmacHex(secret, rawBytes);
   if (!got || !timingSafeEqHex(got, want)) return sign(secret, { error: 'bad signature' }, 401);
@@ -85,7 +85,23 @@ async function handleRaw(rawBytes, headers, secret) {
   try { msg = JSON.parse(new TextDecoder().decode(rawBytes)); }
   catch { return sign(secret, { error: 'bad json' }, 400); }
   if (msg.type === 'agent-games.preflight.v1') return sign(secret, { ok: true, protocolVersion: 'v1' }, 200);
-  if (msg.type === 'agent-games.proof-gatekeeper.v1') return sign(secret, decide(msg), 200);
+  if (msg.type === 'agent-games.proof-gatekeeper.v1') {
+    const res = decide(msg);
+    // Durable replay check (KV), layered on decide()'s in-memory cache. Workers are ephemeral,
+    // so a cold start could otherwise forget a proof accepted earlier in the same round and
+    // wrongly APPROVE a PROOF_REUSED trap. Only accepted references are recorded (spec: a valid
+    // proof does not gain re-entry). Guarded so the agent still works if no KV is bound.
+    if (env && env.SEEN) {
+      const ref = (msg.input && typeof msg.input.proof_tx === 'string') ? msg.input.proof_tx.trim().toLowerCase() : '';
+      if (ref && res.decision === 'APPROVE') {
+        try {
+          if (await env.SEEN.get(ref)) { res.decision = 'REJECT'; res.reason_code = 'PROOF_REUSED'; }
+          else await env.SEEN.put(ref, '1', { expirationTtl: 2592000 });
+        } catch { /* KV hiccup: fall back to the decision decide() already made */ }
+      }
+    }
+    return sign(secret, res, 200);
+  }
   return sign(secret, { error: 'unknown type' }, 400);
 }
 
@@ -103,7 +119,7 @@ export default {
     const secret = env.AGENT_GAMES_HMAC_SECRET;
     if (!secret) return new Response('misconfigured', { status: 500 });
     const raw = new Uint8Array(await request.arrayBuffer());
-    try { return await handleRaw(raw, request.headers, secret); }
+    try { return await handleRaw(raw, request.headers, secret, env); }
     catch { return sign(secret, { decision: 'REJECT', reason_code: 'INTERNAL_ERROR' }, 200); } // fail closed
   }
 };

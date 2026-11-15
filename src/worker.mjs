@@ -16,7 +16,7 @@ function timingSafeEqHex(a, b) {
   return r === 0;
 }
 
-export async function handleRaw(rawBytes, headers, secret) {
+export async function handleRaw(rawBytes, headers, secret, env) {
   const got = (headers.get('x-agent-games-signature') || '').replace(/^sha256=/i, '').trim().toLowerCase();
   const want = await hmacHex(secret, rawBytes);
   if (!got || !timingSafeEqHex(got, want)) return sign(secret, { error: 'bad signature' }, 401);
@@ -24,7 +24,20 @@ export async function handleRaw(rawBytes, headers, secret) {
   try { msg = JSON.parse(new TextDecoder().decode(rawBytes)); }
   catch { return sign(secret, { error: 'bad json' }, 400); }
   if (msg.type === 'agent-games.preflight.v1') return sign(secret, { ok: true, protocolVersion: 'v1' }, 200);
-  if (msg.type === 'agent-games.proof-gatekeeper.v1') return sign(secret, decide(msg), 200);
+  if (msg.type === 'agent-games.proof-gatekeeper.v1') {
+    const res = decide(msg);
+    // Durable replay check (KV), layered on decide()'s in-memory cache (see worker-bundled.mjs).
+    if (env && env.SEEN) {
+      const ref = (msg.input && typeof msg.input.proof_tx === 'string') ? msg.input.proof_tx.trim().toLowerCase() : '';
+      if (ref && res.decision === 'APPROVE') {
+        try {
+          if (await env.SEEN.get(ref)) { res.decision = 'REJECT'; res.reason_code = 'PROOF_REUSED'; }
+          else await env.SEEN.put(ref, '1', { expirationTtl: 2592000 });
+        } catch { /* KV hiccup: keep decide()'s decision */ }
+      }
+    }
+    return sign(secret, res, 200);
+  }
   return sign(secret, { error: 'unknown type' }, 400);
 }
 
@@ -42,7 +55,7 @@ export default {
     const secret = env.AGENT_GAMES_HMAC_SECRET;
     if (!secret) return new Response('misconfigured', { status: 500 });
     const raw = new Uint8Array(await request.arrayBuffer());
-    try { return await handleRaw(raw, request.headers, secret); }
+    try { return await handleRaw(raw, request.headers, secret, env); }
     catch { return sign(secret, { decision: 'REJECT', reason_code: 'INTERNAL_ERROR' }, 200); } // fail closed
   }
 };
