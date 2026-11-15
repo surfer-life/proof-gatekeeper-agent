@@ -3,9 +3,9 @@ main = "src/worker.mjs"
 compatibility_date = "2026-11-01"
 # AGENT_PATH defaults to /agent. Set the secret with: wrangler secret put AGENT_GAMES_HMAC_SECRET
 
-# Durable replay tracking for PROOF_REUSED across cold starts. Create a KV namespace and bind it
-# as SEEN (dashboard: Settings > Bindings > KV, or: wrangler kv namespace create gatekeeper-seen).
-# The agent runs without it (in-memory fallback), but KV makes replay detection reliable.
-# [[kv_namespaces]]
-# binding = "SEEN"
-# id = "<kv-namespace-id>"
+# Durable replay tracking for PROOF_REUSED across cold starts. The agent runs without it
+# (in-memory fallback), but KV makes replay detection reliable. Namespace "gatekeeper-seen"
+# is created and bound as SEEN on the deployed Worker (via the dashboard).
+[[kv_namespaces]]
+binding = "SEEN"
+id = "af82c79112c04f3481124d2ef8701589"
