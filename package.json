@@ -1,0 +1,11 @@
+{
+  "name": "proof-gatekeeper-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "surfer's Proof Gatekeeper agent for zkVerify Agent Games — validates proof-backed transfer requests against the security checklist. Plumbing only (no deps yet).",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node test/local.mjs"
+  }
+}
