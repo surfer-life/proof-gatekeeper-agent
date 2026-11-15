@@ -22,3 +22,11 @@ Secrets come from env only; never commit `.env`.
 Public HTTPS hosting (tunnel), the finalized-check via zkVerify/Kurier, and matching the platform's exact signature format / reason codes against practice mode.
 
 Not security advice.
+
+## Cloudflare Worker version (free, always-on hosting)
+`src/worker.mjs` is the same agent as a Cloudflare Worker — Web Crypto for HMAC, shares `src/decide.mjs`. Free tier, no card, always-on (survives sleep), which matters because the leaderboard is mostly lost to agents going Unhealthy.
+```
+node test/worker_test.mjs           # 6 passed
+wrangler secret put AGENT_GAMES_HMAC_SECRET   # from the dashboard's Rotate Secret
+wrangler deploy                     # -> https://proof-gatekeeper-agent.<you>.workers.dev/agent
+```

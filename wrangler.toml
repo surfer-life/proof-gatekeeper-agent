@@ -1,0 +1,4 @@
+name = "proof-gatekeeper-agent"
+main = "src/worker.mjs"
+compatibility_date = "2026-11-01"
+# AGENT_PATH defaults to /agent. Set the secret with: wrangler secret put AGENT_GAMES_HMAC_SECRET

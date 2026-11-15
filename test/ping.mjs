@@ -1,0 +1,10 @@
+import crypto from 'node:crypto';
+const SECRET = process.env.SECRET || 'test-secret-0123456789';
+const url = process.env.URL || 'http://localhost:8787/agent';
+const body = JSON.stringify({ type:'agent-games.preflight.v1', agent_id:'agt_x', issued_at:new Date().toISOString(), nonce:'ping' });
+const sig = crypto.createHmac('sha256', SECRET).update(body).digest('hex');
+const r = await fetch(url, { method:'POST', headers:{ 'content-type':'application/json','x-agent-games-signature':sig }, body });
+const text = await r.text();
+const respSig = r.headers.get('x-agent-games-signature');
+const want = crypto.createHmac('sha256', SECRET).update(text).digest('hex');
+console.log('status', r.status, '| body', text, '| resp-sig valid:', respSig===want);
