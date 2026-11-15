@@ -1,1 +1,1 @@
-{ "functions": { "api/prove.mjs": { "maxDuration": 60, "memory": 1024 } } }
+{ "functions": { "api/*.mjs": { "maxDuration": 60, "memory": 1024 } } }
