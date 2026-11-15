@@ -93,7 +93,11 @@ async function handleRaw(rawBytes, headers, secret, env) {
     // proof does not gain re-entry). Guarded so the agent still works if no KV is bound.
     if (env && env.SEEN) {
       const ref = (msg.input && typeof msg.input.proof_tx === 'string') ? msg.input.proof_tx.trim().toLowerCase() : '';
-      if (ref && res.decision === 'APPROVE') {
+      // Record EVERY proof reference seen (not only approved ones) and reject any repeat: a proof
+      // reference is unique, so a second occurrence is always a replay — even if the first was in a
+      // task we rejected for another reason. This catches PROOF_REUSED the in-memory/approve-only
+      // cache would miss across cold starts and across the different reasons a reference first appears.
+      if (ref) {
         try {
           if (await env.SEEN.get(ref)) { res.decision = 'REJECT'; res.reason_code = 'PROOF_REUSED'; }
           else await env.SEEN.put(ref, '1', { expirationTtl: 2592000 });

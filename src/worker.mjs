@@ -29,7 +29,9 @@ export async function handleRaw(rawBytes, headers, secret, env) {
     // Durable replay check (KV), layered on decide()'s in-memory cache (see worker-bundled.mjs).
     if (env && env.SEEN) {
       const ref = (msg.input && typeof msg.input.proof_tx === 'string') ? msg.input.proof_tx.trim().toLowerCase() : '';
-      if (ref && res.decision === 'APPROVE') {
+      // Record every proof reference seen and reject any repeat (a reference is unique, so a repeat
+      // is always a replay — even if the first appearance was in a task we rejected for another reason).
+      if (ref) {
         try {
           if (await env.SEEN.get(ref)) { res.decision = 'REJECT'; res.reason_code = 'PROOF_REUSED'; }
           else await env.SEEN.put(ref, '1', { expirationTtl: 2592000 });
