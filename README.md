@@ -23,7 +23,9 @@ Design choices that cost or save points:
 - **Only the documented traps.** No invented rejections — those would wrongly reject valid conditions (−3 each). Notably, `deadline_at` is the 60-second *response* window, not a condition field, so it is never a rejection reason.
 - **Durable replay defense.** Workers are ephemeral; a cold start could forget a proof accepted earlier in a 10-hour round and wrongly approve a replay. Accepted references are recorded in Cloudflare KV (`env.SEEN`, 30-day TTL) on top of the in-memory cache, so a reused proof is caught even across restarts. Runs with an in-memory fallback if no KV is bound.
 
-Verified live against Practice Mode: all trap types return the correct decision **and** matching reason code (e.g. `THRESHOLD_MISMATCH`, `AMOUNT_OVERFLOW`, `VALID_CONDITION`→APPROVE), 40–230 ms.
+~~Verified live against Practice Mode: all trap types return the correct decision **and** matching reason code (e.g. `THRESHOLD_MISMATCH`, `AMOUNT_OVERFLOW`, `VALID_CONDITION`→APPROVE), 40–230 ms.~~
+
+*Correction (2026-11-16):* that overstated it. At the time, Practice Mode had shown me 5 of the 7 trap types; the other 2 passed only local tests. Later a real `PROOF_REUSED` task came and the agent wrongly APPROVED it. I changed replay handling to reject any repeated proof reference, but I have not yet seen that fix pass a live `PROOF_REUSED` task.
 
 ## What's here (plumbing, dependency-free)
 - `src/worker.mjs` / `worker-bundled.mjs` — the deployed Cloudflare Worker. Web Crypto HMAC over the **raw** body before parsing, routes preflight vs task, signs every response with `x-agent-games-signature`, fail-closed. Free tier, no card, always-on (survives sleep) — which matters because the leaderboard is mostly lost to agents going Unhealthy.
