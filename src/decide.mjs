@@ -1,8 +1,12 @@
 // Proof Gatekeeper decision logic — deterministic checklist (no LLM in the final call).
-// Spec: SPEC.md (agentgames.zkverify.io/build, Security checklist).
-// APPROVE only if EVERY check passes; otherwise REJECT with a reason_code. Fail closed.
-// NOTE: reason_code strings are my best guess except VK_SUBSTITUTION (from the spec example);
-//       confirm/adjust against practice-mode feedback before scored rounds.
+// Spec: agentgames.zkverify.io/events/proof-gatekeeper (Trap Encyclopedia + expected response).
+// APPROVE only if EVERY documented check passes; otherwise REJECT with the exact trap reason_code.
+// Fail closed on malformed input. Reason codes verified against the event's Trap Encyclopedia:
+//   VALID_CONDITION (approve), VK_SUBSTITUTION, THRESHOLD_MISMATCH, RECIPIENT_MISMATCH,
+//   AMOUNT_OVERFLOW, EXPIRED_CONDITION, PROOF_REUSED.
+// Only these seven cases exist in competition; we do NOT invent extra rejections (which would
+// wrongly reject valid conditions and cost points). deadline_at is the 60s *response* window,
+// not a condition field, so it is never a rejection reason here.
 
 const bi = (v) => { try { return BigInt(v); } catch { return null; } };
 const norm = (a) => (typeof a === 'string' ? a.trim().toLowerCase() : a);
@@ -16,45 +20,33 @@ export function decide(task, { markSeen = true } = {}) {
     const inp = task?.input;
     if (!inp || typeof inp !== 'object') return rej('MALFORMED_INPUT', task);
 
-    // 6. deadline valid (timestamp). If deadline passed, reject.
-    if (task.deadline_at) {
-      const dl = Date.parse(task.deadline_at);
-      if (Number.isFinite(dl) && Date.now() > dl) return rej('DEADLINE_PASSED', task);
-    }
-
-    // 1. VK matches the key registered for this condition.
+    // 1. Verification key: the proof's VK must match the registered condition VK.
     if (norm(inp.proof_vk) !== norm(inp.registered_vk)) return rej('VK_SUBSTITUTION', task);
 
-    // 3a. public inputs prove the required recipient.
-    if (norm(inp.recipient) !== norm(inp.condition_recipient)) return rej('RECIPIENT_MISMATCH', task);
-
-    // 3b. threshold: public_balance must meet the minimum.
+    // 2. Threshold: the public balance disclosed in the proof must meet the minimum.
     const bal = bi(inp.public_balance), min = bi(inp.minimum);
     if (bal === null || min === null) return rej('MALFORMED_INPUT', task);
-    if (bal < min) return rej('BELOW_MINIMUM', task);
+    if (bal < min) return rej('THRESHOLD_MISMATCH', task);
 
-    // 3c. action/amount within max_transfer.
+    // 3. Recipient: the recipient committed in the proof must match the payment condition.
+    if (norm(inp.recipient) !== norm(inp.condition_recipient)) return rej('RECIPIENT_MISMATCH', task);
+
+    // 4. Amount cap: requested amount must not exceed the single-transfer cap.
     const amt = bi(inp.amount), maxT = bi(inp.max_transfer);
     if (amt === null || maxT === null) return rej('MALFORMED_INPUT', task);
-    if (amt <= 0n) return rej('NONPOSITIVE_AMOUNT', task);
-    if (amt > maxT) return rej('AMOUNT_EXCEEDS_MAX', task);
-    // amount must also be spendable from the proven balance.
-    if (amt > bal) return rej('AMOUNT_EXCEEDS_BALANCE', task);
+    if (amt > maxT) return rej('AMOUNT_OVERFLOW', task);
 
-    // expiry: current_block must be before expiry_block.
-    if (inp.current_block != null && inp.expiry_block != null) {
-      if (Number(inp.current_block) >= Number(inp.expiry_block)) return rej('EXPIRED', task);
-    }
+    // 5. Expiry: the condition's block-height expiry must not have passed.
+    const cur = bi(inp.current_block), exp = bi(inp.expiry_block);
+    if (cur !== null && exp !== null && cur >= exp) return rej('EXPIRED_CONDITION', task);
 
-    // 4. proof reference not already used.
+    // 6. Reuse: the proof reference must not have been accepted in a previous task.
     const ref = norm(inp.proof_tx);
-    if (ref && seenProofTx.has(ref)) return rej('PROOF_REUSE', task);
+    if (ref && seenProofTx.has(ref)) return rej('PROOF_REUSED', task);
 
-    // 5. finalized-before-approval: checked elsewhere (zkVerify). Placeholder:
-    // if (!(await isFinalized(inp.proof_tx))) return rej('NOT_FINALIZED', task);
-
+    // All documented checks pass → approve.
     if (markSeen && ref) seenProofTx.add(ref);
-    return { decision: 'APPROVE', reason_code: 'OK', proof_tx: inp.proof_tx };
+    return { decision: 'APPROVE', reason_code: 'VALID_CONDITION', proof_tx: inp.proof_tx };
   } catch {
     return rej('INTERNAL_ERROR', task); // fail closed
   }

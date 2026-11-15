@@ -25,8 +25,8 @@ await check('preflight',{type:'agent-games.preflight.v1',nonce:'x'},null,200);
 // bad signature
 {const body=new TextEncoder().encode(JSON.stringify(base()));const resp=await handleRaw(body,new Headers({'x-agent-games-signature':'deadbeef'}),SECRET);const ok=resp.status===401;console.log(`${ok?'PASS':'FAIL'}  bad-sig -> ${resp.status}`);ok?pass++:fail++;}
 _resetSeen();
-await check('valid',base(),'APPROVE','OK');
+await check('valid',base(),'APPROVE','VALID_CONDITION');
 await check('VK sub',(()=>{const t=base();t.input.proof_vk='0x'+'1'.repeat(64);return t;})(),'REJECT','VK_SUBSTITUTION');
-await check('amount>max',(()=>{const t=base();t.input.amount='1500';return t;})(),'REJECT','AMOUNT_EXCEEDS_MAX');
-await check('expired',(()=>{const t=base();t.input.current_block=8430001;return t;})(),'REJECT','EXPIRED');
+await check('amount>max',(()=>{const t=base();t.input.amount='1500';return t;})(),'REJECT','AMOUNT_OVERFLOW');
+await check('expired',(()=>{const t=base();t.input.current_block=8430001;return t;})(),'REJECT','EXPIRED_CONDITION');
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail?1:0);

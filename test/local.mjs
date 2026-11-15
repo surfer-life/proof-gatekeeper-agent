@@ -49,20 +49,21 @@ function check(name, task, wantDecision, wantReason, secret = SECRET) {
 }
 
 _resetSeen();
-check('valid request', base(), 'APPROVE', 'OK');
+check('valid request', base(), 'APPROVE', 'VALID_CONDITION');
 check('VK substitution', (() => { const t = base(); t.input.proof_vk = '0x' + '1'.repeat(64); return t; })(), 'REJECT', 'VK_SUBSTITUTION');
 check('recipient mismatch', (() => { const t = base(); t.input.recipient = '0x' + 'a'.repeat(40); return t; })(), 'REJECT', 'RECIPIENT_MISMATCH');
-check('below minimum', (() => { const t = base(); t.input.public_balance = '999'; return t; })(), 'REJECT', 'BELOW_MINIMUM');
-check('amount exceeds max', (() => { const t = base(); t.input.amount = '1500'; return t; })(), 'REJECT', 'AMOUNT_EXCEEDS_MAX');
-check('expired', (() => { const t = base(); t.input.current_block = 8430001; return t; })(), 'REJECT', 'EXPIRED');
-check('deadline passed', (() => { const t = base(); t.deadline_at = new Date(Date.now() - 1000).toISOString(); return t; })(), 'REJECT', 'DEADLINE_PASSED');
+check('threshold mismatch', (() => { const t = base(); t.input.public_balance = '999'; return t; })(), 'REJECT', 'THRESHOLD_MISMATCH');
+check('amount overflow', (() => { const t = base(); t.input.amount = '1500'; return t; })(), 'REJECT', 'AMOUNT_OVERFLOW');
+check('expired condition', (() => { const t = base(); t.input.current_block = 8430001; return t; })(), 'REJECT', 'EXPIRED_CONDITION');
+// deadline_at is the 60s response window, NOT a condition field: a valid condition still APPROVEs.
+check('past response deadline still approves', (() => { const t = base(); t.deadline_at = new Date(Date.now() - 1000).toISOString(); return t; })(), 'APPROVE', 'VALID_CONDITION');
 // proof reuse: same proof_tx twice
 {
   const t = base(); const fixed = '0xreuse00000000aa';
   t.input.proof_tx = fixed;
-  check('first use of proof_tx', t, 'APPROVE', 'OK');
+  check('first use of proof_tx', t, 'APPROVE', 'VALID_CONDITION');
   const t2 = base(); t2.input.proof_tx = fixed;
-  check('reused proof_tx', t2, 'REJECT', 'PROOF_REUSE');
+  check('reused proof_tx', t2, 'REJECT', 'PROOF_REUSED');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
