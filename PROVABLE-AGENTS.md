@@ -33,6 +33,7 @@ Re-reading my own logs, several sentences here said more than I had checked. Fix
 2. **Credit.** The circuit input interfaces I built on were reverse-engineered and published by JM-03 ([agent-games-gatekeeper](https://github.com/JM-03/agent-games-gatekeeper), [agent-games-steal-the-vfy](https://github.com/JM-03/agent-games-steal-the-vfy)). I should have named them, not "other participants". The game parameters I used (FORTIFY cost 2, blocks 6, EXTRACT cap 10) are the ones I read in JM-03's `strategy.ts`, so "the strategy is my own" was too strong: the payoff arithmetic is mine, the inputs are theirs.
 3. **"It never loses a turn."** That is a one-turn payoff table. What I ran was a 20-turn simulation in *my own model* of the resolver, against 960 parametric strategies: 912 wins, 48 draws, 0 losses. My agent has played no real match.
 4. **Replay detection.** After I fixed it, I have not yet seen it catch a real reused proof on the live platform. The tests that pass are local.
+5. **The framing is borrowed.** "The unprovable agent" as the problem, and the examples of a trading bot capped at a loss and a wallet guard bound to an allowlist, come from JM-03's [WRITEUP](https://github.com/JM-03/agent-games-steal-the-vfy/blob/main/WRITEUP.md), which was published before this file. My dev.to article opened with their sentence almost word for word. I used it without credit.
 
 ## The receipts (what's checked, not claimed)
 - Both proofs **verify against zkVerify's registered verification keys** — Gatekeeper
