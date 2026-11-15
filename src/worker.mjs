@@ -36,6 +36,25 @@ export async function handleRaw(rawBytes, headers, secret, env) {
         } catch { /* KV hiccup: keep decide()'s decision */ }
       }
     }
+    // Best-effort Groth16 proof via the prover sidecar (Workers can't run snarkjs). If PROVER_URL
+    // is unset or the prover is down, return the correct decision without a proof.
+    if (env && env.PROVER_URL) {
+      try {
+        const ctl = new AbortController();
+        const to = setTimeout(() => ctl.abort(), 25000);
+        const pr = await fetch(env.PROVER_URL, {
+          method: 'POST', signal: ctl.signal,
+          headers: { 'content-type': 'application/json', 'x-prover-key': env.PROVER_KEY || '' },
+          body: JSON.stringify({ input: msg.input, task_id: msg.task_id, approve: res.decision === 'APPROVE', reuse: res.reason_code === 'PROOF_REUSED' }),
+        });
+        clearTimeout(to);
+        if (pr.ok) {
+          const pj = await pr.json();
+          if (Array.isArray(pj.public_signals)) res.public_signals = pj.public_signals;
+          if (pj.proof) res.proof = pj.proof;
+        }
+      } catch { /* prover unavailable: decision stands, no proof attached */ }
+    }
     return sign(secret, res, 200);
   }
   return sign(secret, { error: 'unknown type' }, 400);
