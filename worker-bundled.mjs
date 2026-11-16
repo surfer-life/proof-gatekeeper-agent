@@ -128,6 +128,17 @@ async function handleRaw(rawBytes, headers, secret, env) {
         }
       } catch (e) { diag.err = String((e && e.name) || 'err'); /* decision stands, no proof attached */ }
     }
+    // Practice-only experiment switch (2026-11-17): lets me learn what the practice "Proof" badge
+    // actually checks. Never applies to competition tasks (mode is inside the HMAC-signed envelope).
+    if (msg.mode === 'practice' && env && env.SEEN) {
+      try {
+        const v = await env.SEEN.get('debug:variant');
+        diag.variant = v || 'none';
+        if (v === 'corrupt' && Array.isArray(res.public_signals) && res.public_signals.length > 1) {
+          res.public_signals = res.public_signals.slice(); res.public_signals[1] = '12345';
+        } else if (v === 'noproof') { delete res.proof; delete res.public_signals; }
+      } catch { /* ignore */ }
+    }
     // Diagnostic log (2026-11-17): why did R04 score 8 x (12-2)? Record what each task looked like
     // and what we sent back. Task envelopes are not secret; no keys/secrets are written.
     if (env && env.SEEN) {
@@ -156,6 +167,21 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = env.AGENT_PATH || '/agent';
+    // Read-only diagnostics + practice-only variant switch. Exposes only task envelopes (not secret)
+    // and what the agent answered; the switch cannot touch scored (competition) tasks.
+    if (env.SEEN && url.pathname === '/debug/logs' && request.method === 'GET') {
+      const list = await env.SEEN.list({ prefix: 'log:' });
+      const keys = list.keys.map(k => k.name).sort().slice(-20);
+      const out = [];
+      for (const k of keys) out.push(JSON.parse(await env.SEEN.get(k)));
+      return new Response(JSON.stringify(out), { headers: { 'content-type': 'application/json' } });
+    }
+    if (env.SEEN && url.pathname === '/debug/variant' && request.method === 'POST') {
+      const v = url.searchParams.get('v') || 'none';
+      if (!['none', 'corrupt', 'noproof'].includes(v)) return new Response('bad variant', { status: 400 });
+      await env.SEEN.put('debug:variant', v, { expirationTtl: 86400 });
+      return new Response('variant=' + v);
+    }
     if (request.method !== 'POST' || url.pathname !== path) return new Response('not found', { status: 404 });
     const secret = env.AGENT_GAMES_HMAC_SECRET;
     if (!secret) return new Response('misconfigured', { status: 500 });
