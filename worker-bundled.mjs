@@ -107,6 +107,8 @@ async function handleRaw(rawBytes, headers, secret, env) {
     // Attach a Groth16 proof via the prover sidecar (Workers can't run snarkjs). Best-effort:
     // if PROVER_URL is unset or the prover is slow/down, return the correct decision without a
     // proof (−2 but never Unhealthy). For PROOF_REUSED the prover returns public_signals only.
+    const t0 = Date.now();
+    const diag = { prover_status: null, note: null, err: null };
     if (env && env.PROVER_URL) {
       try {
         const ctl = new AbortController();
@@ -117,12 +119,27 @@ async function handleRaw(rawBytes, headers, secret, env) {
           body: JSON.stringify({ input: msg.input, task_id: msg.task_id, approve: res.decision === 'APPROVE', reuse: res.reason_code === 'PROOF_REUSED' }),
         });
         clearTimeout(to);
+        diag.prover_status = pr.status;
         if (pr.ok) {
           const pj = await pr.json();
+          diag.note = pj.note || (pj.self_verified ? 'self_verified' : null);
           if (Array.isArray(pj.public_signals)) res.public_signals = pj.public_signals;
           if (pj.proof) res.proof = pj.proof;
         }
-      } catch { /* prover unavailable: decision stands, no proof attached */ }
+      } catch (e) { diag.err = String((e && e.name) || 'err'); /* decision stands, no proof attached */ }
+    }
+    // Diagnostic log (2026-11-17): why did R04 score 8 x (12-2)? Record what each task looked like
+    // and what we sent back. Task envelopes are not secret; no keys/secrets are written.
+    if (env && env.SEEN) {
+      try {
+        const rec = {
+          at: new Date().toISOString(), task_id: msg.task_id, mode: msg.mode, msg_keys: Object.keys(msg),
+          input: msg.input, decision: res.decision, reason_code: res.reason_code,
+          prover_ms: Date.now() - t0, ...diag, has_proof: !!res.proof,
+          public_signals: res.public_signals || null, resp_keys: Object.keys(res),
+        };
+        await env.SEEN.put('log:' + rec.at + ':' + String(msg.task_id || '').slice(0, 60), JSON.stringify(rec), { expirationTtl: 1209600 });
+      } catch { /* logging must never affect the answer */ }
     }
     return sign(secret, res, 200);
   }
