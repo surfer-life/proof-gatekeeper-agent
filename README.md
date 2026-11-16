@@ -27,6 +27,8 @@ Design choices that cost or save points:
 
 *Correction (2026-11-16):* that overstated it. At the time, Practice Mode had shown me 5 of the 7 trap types; the other 2 passed only local tests. Later a real `PROOF_REUSED` task came and the agent wrongly APPROVED it. I changed replay handling to reject any repeated proof reference, but I have not yet seen that fix pass a live `PROOF_REUSED` task.
 
+*Update (2026-11-16 13:14 KST):* Practice Mode sent a `PROOF_REUSED` task (`practice_61507933…`); the agent answered REJECT / PROOF_REUSED, judged correct. One live case, not a rate. The next task (VALID_CONDITION) came back APPROVE with a Groth16 proof marked VERIFIED, after this morning's prover-key rotation.
+
 ## What's here (plumbing, dependency-free)
 - `src/worker.mjs` / `worker-bundled.mjs` — the deployed Cloudflare Worker. Web Crypto HMAC over the **raw** body before parsing, routes preflight vs task, signs every response with `x-agent-games-signature`, fail-closed. Free tier, no card, always-on (survives sleep) — which matters because the leaderboard is mostly lost to agents going Unhealthy.
 - `src/server.mjs` — the same agent as a Node service (`http` + `crypto` built-ins), for local runs.
