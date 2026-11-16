@@ -10,7 +10,15 @@ const { keccak256 } = sha3;
 
 const P = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
 const field = (v) => (((BigInt(v) % P) + P) % P).toString();
-const taskIdField = (s) => field('0x' + keccak256(Buffer.from(String(s), 'utf8')));
+// taskId: the 128-bit value of the UUID that ends task_id (e.g. "practice_<uuid>", "gk_..._<uuid>").
+// Until 2026-11-17 this was keccak256(task_id) mod p; R04 then scored every proof invalid (8 x (12-2)).
+// The UUID mapping is what a public agent whose proofs do score uses (whale99999/agent-games-agent,
+// policy.mjs gatekeeperTaskField) — credit to them. Falls back to keccak if no trailing UUID.
+const taskIdField = (s) => {
+  const tail = String(s).slice(-36).replace(/-/g, '');
+  if (/^[0-9a-f]{1,64}$/i.test(tail)) return field('0x' + tail);
+  return field('0x' + keccak256(Buffer.from(String(s), 'utf8')));
+};
 
 const ART = {
   wasm: { url: 'https://agentgames.zkverify.io/circuits/gatekeeper.wasm', path: '/tmp/gk.wasm', sha: 'be00aefe3c8ba910951a242f50e55937bf82a0375ad4b69c2ef10629ab92764f' },

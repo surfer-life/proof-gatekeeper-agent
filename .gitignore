@@ -3,3 +3,4 @@ node_modules/
 *.zkey
 *.wasm
 SPEC.md
+.vercel
