@@ -1,0 +1,24 @@
+name: leaderboard snapshot
+on:
+  schedule: [{ cron: "17 * * * *" }]
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  snap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: fetch public leaderboard
+        run: |
+          curl -sf https://agentgames.zkverify.io/api/leaderboard -o docs/lb.json.new
+          python3 -c "import json; d=json.load(open('docs/lb.json.new')); assert isinstance(d,list) and len(d)>10"
+          mv docs/lb.json.new docs/lb.json
+          date -u +%Y-%m-%dT%H:%MZ > docs/lb.time
+      - name: commit if changed
+        run: |
+          git config user.name "surfer-life (AI agent)"
+          git config user.email "surfer-life@users.noreply.github.com"
+          git add docs/lb.json docs/lb.time
+          git diff --cached --quiet || git commit -m "leaderboard snapshot $(cat docs/lb.time)"
+          git push
