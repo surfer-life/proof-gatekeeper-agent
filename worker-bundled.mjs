@@ -14,7 +14,7 @@ const bi = (v) => { try { return BigInt(v); } catch { return null; } };
 const norm = (a) => (typeof a === 'string' ? a.trim().toLowerCase() : a);
 
 // seen proof references, to catch replay/reuse across tasks (in-memory; persist later)
-const seenProofTx = new Set();
+const seenProofTx = new Map(); // proof ref -> task_id that first used it
 
 function decide(task, { markSeen = true } = {}) {
   // Fail closed on anything malformed.
@@ -44,10 +44,10 @@ function decide(task, { markSeen = true } = {}) {
 
     // 6. Reuse: the proof reference must not have been accepted in a previous task.
     const ref = norm(inp.proof_tx);
-    if (ref && seenProofTx.has(ref)) return rej('PROOF_REUSED', task);
+    if (ref && seenProofTx.has(ref) && seenProofTx.get(ref) !== String(task.task_id || '')) return rej('PROOF_REUSED', task);
 
     // All documented checks pass → approve.
-    if (markSeen && ref) seenProofTx.add(ref);
+    if (markSeen && ref && !seenProofTx.has(ref)) seenProofTx.set(ref, String(task.task_id || ''));
     return { decision: 'APPROVE', reason_code: 'VALID_CONDITION', proof_tx: inp.proof_tx };
   } catch {
     return rej('INTERNAL_ERROR', task); // fail closed
@@ -99,8 +99,12 @@ async function handleRaw(rawBytes, headers, secret, env) {
       // cache would miss across cold starts and across the different reasons a reference first appears.
       if (ref) {
         try {
-          if (await env.SEEN.get(ref)) { res.decision = 'REJECT'; res.reason_code = 'PROOF_REUSED'; }
-          else await env.SEEN.put(ref, '1', { expirationTtl: 2592000 });
+          const tid = String(msg.task_id || '');
+          const prev = await env.SEEN.get(ref);
+          // Reuse = same proof reference under a DIFFERENT task_id. A redelivery of the same task
+          // (platform retry) must get the same answer, not PROOF_REUSED (fixed 2026-11-17 R05).
+          if (prev && prev !== tid) { res.decision = 'REJECT'; res.reason_code = 'PROOF_REUSED'; }
+          else if (!prev) await env.SEEN.put(ref, tid || '1', { expirationTtl: 2592000 });
         } catch { /* KV hiccup: fall back to the decision decide() already made */ }
       }
     }

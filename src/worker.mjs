@@ -33,8 +33,12 @@ export async function handleRaw(rawBytes, headers, secret, env) {
       // is always a replay — even if the first appearance was in a task we rejected for another reason).
       if (ref) {
         try {
-          if (await env.SEEN.get(ref)) { res.decision = 'REJECT'; res.reason_code = 'PROOF_REUSED'; }
-          else await env.SEEN.put(ref, '1', { expirationTtl: 2592000 });
+          const tid = String(msg.task_id || '');
+          const prev = await env.SEEN.get(ref);
+          // Reuse = same proof reference under a DIFFERENT task_id. A redelivery of the same task
+          // (platform retry) must get the same answer, not PROOF_REUSED (fixed 2026-11-17 R05).
+          if (prev && prev !== tid) { res.decision = 'REJECT'; res.reason_code = 'PROOF_REUSED'; }
+          else if (!prev) await env.SEEN.put(ref, tid || '1', { expirationTtl: 2592000 });
         } catch { /* KV hiccup: keep decide()'s decision */ }
       }
     }

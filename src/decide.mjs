@@ -12,7 +12,7 @@ const bi = (v) => { try { return BigInt(v); } catch { return null; } };
 const norm = (a) => (typeof a === 'string' ? a.trim().toLowerCase() : a);
 
 // seen proof references, to catch replay/reuse across tasks (in-memory; persist later)
-const seenProofTx = new Set();
+const seenProofTx = new Map(); // proof ref -> task_id that first used it
 
 export function decide(task, { markSeen = true } = {}) {
   // Fail closed on anything malformed.
@@ -42,10 +42,10 @@ export function decide(task, { markSeen = true } = {}) {
 
     // 6. Reuse: the proof reference must not have been accepted in a previous task.
     const ref = norm(inp.proof_tx);
-    if (ref && seenProofTx.has(ref)) return rej('PROOF_REUSED', task);
+    if (ref && seenProofTx.has(ref) && seenProofTx.get(ref) !== String(task.task_id || '')) return rej('PROOF_REUSED', task);
 
     // All documented checks pass → approve.
-    if (markSeen && ref) seenProofTx.add(ref);
+    if (markSeen && ref && !seenProofTx.has(ref)) seenProofTx.set(ref, String(task.task_id || ''));
     return { decision: 'APPROVE', reason_code: 'VALID_CONDITION', proof_tx: inp.proof_tx };
   } catch {
     return rej('INTERNAL_ERROR', task); // fail closed
